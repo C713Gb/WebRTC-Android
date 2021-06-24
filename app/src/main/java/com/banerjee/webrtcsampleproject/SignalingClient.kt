@@ -4,6 +4,10 @@ import android.util.Log
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.gson.Gson
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.features.json.*
+import io.ktor.client.features.websocket.*
 import io.ktor.util.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ConflatedBroadcastChannel
@@ -19,7 +23,8 @@ class SignalingClient(
 ) : CoroutineScope {
 
     companion object {
-        private const val HOST_ADDRESS = "192.168.0.12"
+//        private const val HOST_ADDRESS = "192.168.0.12"
+        private const val HOST_ADDRESS = "34.228.40.86"
     }
 
     var jsonObject : JSONObject?= null
@@ -35,12 +40,12 @@ class SignalingClient(
     var SDPtype : String? = null
     override val coroutineContext = Dispatchers.IO + job
 
-//    private val client = HttpClient(CIO) {
-//        install(WebSockets)
-//        install(JsonFeature) {
-//            serializer = GsonSerializer()
-//        }
-//    }
+    private val client = HttpClient(CIO) {
+        install(WebSockets)
+        install(JsonFeature) {
+            serializer = GsonSerializer()
+        }
+    }
 
     private val sendChannel = ConflatedBroadcastChannel<String>()
 
@@ -49,12 +54,15 @@ class SignalingClient(
     }
 
     private fun connect() = launch {
-        db.enableNetwork().addOnSuccessListener {
-            listener.onConnectionEstablished()
-        }
-        val sendData = sendChannel.offer("")
-        sendData.let {
-            Log.v(this@SignalingClient.javaClass.simpleName, "Sending: $it")
+
+//        client.ws(host = HOST_ADDRESS, port = 8080, path = "/connect"){
+
+            db.enableNetwork().addOnSuccessListener {
+                listener.onConnectionEstablished()
+            }
+            val sendData = sendChannel.offer("")
+            sendData.let {
+                Log.v(this@SignalingClient.javaClass.simpleName, "Sending: $it")
 //            val data = hashMapOf(
 //                    "data" to it
 //            )
@@ -66,66 +74,66 @@ class SignalingClient(
 //                    .addOnFailureListener { e ->
 //                        Log.e(TAG, "Error adding document", e)
 //                    }
-        }
-        try {
-            db.collection("calls")
-                .document(meetingID)
-                .addSnapshotListener { snapshot, e ->
+            }
+            try {
+                db.collection("calls")
+                    .document(meetingID)
+                    .addSnapshotListener { snapshot, e ->
 
-                    if (e != null) {
-                        Log.w(TAG, "listen:error", e)
-                        return@addSnapshotListener
-                    }
-
-                    if (snapshot != null && snapshot.exists()) {
-                        val data = snapshot.data
-                        if (data?.containsKey("type")!! &&
-                            data.getValue("type").toString() == "OFFER") {
-                            listener.onOfferReceived(SessionDescription(
-                                SessionDescription.Type.OFFER,data["sdp"].toString()))
-                            SDPtype = "Offer"
-                        } else if (data?.containsKey("type") &&
-                            data.getValue("type").toString() == "ANSWER") {
-                            listener.onAnswerReceived(SessionDescription(
-                                SessionDescription.Type.ANSWER,data["sdp"].toString()))
-                            SDPtype = "Answer"
-                        } else if (!Constants.isIntiatedNow && data.containsKey("type") &&
-                            data.getValue("type").toString() == "END_CALL") {
-                            listener.onCallEnded()
-                            SDPtype = "End Call"
-
+                        if (e != null) {
+                            Log.w(TAG, "listen:error", e)
+                            return@addSnapshotListener
                         }
-                        Log.d(TAG, "Current data: ${snapshot.data}")
-                    } else {
-                        Log.d(TAG, "Current data: null")
-                    }
-                }
-            db.collection("calls").document(meetingID)
-                .collection("candidates").addSnapshotListener{ querysnapshot,e->
-                    if (e != null) {
-                        Log.w(TAG, "listen:error", e)
-                        return@addSnapshotListener
-                    }
 
-                    if (querysnapshot != null && !querysnapshot.isEmpty) {
-                        for (dataSnapShot in querysnapshot) {
+                        if (snapshot != null && snapshot.exists()) {
+                            val data = snapshot.data
+                            if (data?.containsKey("type")!! &&
+                                data.getValue("type").toString() == "OFFER") {
+                                listener.onOfferReceived(SessionDescription(
+                                    SessionDescription.Type.OFFER,data["sdp"].toString()))
+                                SDPtype = "Offer"
+                            } else if (data?.containsKey("type") &&
+                                data.getValue("type").toString() == "ANSWER") {
+                                listener.onAnswerReceived(SessionDescription(
+                                    SessionDescription.Type.ANSWER,data["sdp"].toString()))
+                                SDPtype = "Answer"
+                            } else if (!Constants.isIntiatedNow && data.containsKey("type") &&
+                                data.getValue("type").toString() == "END_CALL") {
+                                listener.onCallEnded()
+                                SDPtype = "End Call"
 
-                            val data = dataSnapShot.data
-                            if (SDPtype == "Offer" && data.containsKey("type") && data.get("type")=="offerCandidate") {
-                                listener.onIceCandidateReceived(
-                                    IceCandidate(data["sdpMid"].toString(),
-                                        Math.toIntExact(data["sdpMLineIndex"] as Long),
-                                        data["sdpCandidate"].toString()))
-                            } else if (SDPtype == "Answer" && data.containsKey("type") && data.get("type")=="answerCandidate") {
-                                listener.onIceCandidateReceived(
-                                    IceCandidate(data["sdpMid"].toString(),
-                                        Math.toIntExact(data["sdpMLineIndex"] as Long),
-                                        data["sdpCandidate"].toString()))
                             }
-                            Log.e(TAG, "candidateQuery: $dataSnapShot" )
+                            Log.d(TAG, "Current data: ${snapshot.data}")
+                        } else {
+                            Log.d(TAG, "Current data: null")
                         }
                     }
-                }
+                db.collection("calls").document(meetingID)
+                    .collection("candidates").addSnapshotListener{ querysnapshot,e->
+                        if (e != null) {
+                            Log.w(TAG, "listen:error", e)
+                            return@addSnapshotListener
+                        }
+
+                        if (querysnapshot != null && !querysnapshot.isEmpty) {
+                            for (dataSnapShot in querysnapshot) {
+
+                                val data = dataSnapShot.data
+                                if (SDPtype == "Offer" && data.containsKey("type") && data.get("type")=="offerCandidate") {
+                                    listener.onIceCandidateReceived(
+                                        IceCandidate(data["sdpMid"].toString(),
+                                            Math.toIntExact(data["sdpMLineIndex"] as Long),
+                                            data["sdpCandidate"].toString()))
+                                } else if (SDPtype == "Answer" && data.containsKey("type") && data.get("type")=="answerCandidate") {
+                                    listener.onIceCandidateReceived(
+                                        IceCandidate(data["sdpMid"].toString(),
+                                            Math.toIntExact(data["sdpMLineIndex"] as Long),
+                                            data["sdpCandidate"].toString()))
+                                }
+                                Log.e(TAG, "candidateQuery: $dataSnapShot" )
+                            }
+                        }
+                    }
 //            db.collection("calls").document(meetingID)
 //                    .get()
 //                    .addOnSuccessListener { result ->
@@ -142,10 +150,15 @@ class SignalingClient(
 //                        Log.e(TAG, "connect: $it")
 //                    }
 
-        } catch (exception: Exception) {
-            Log.e(TAG, "connectException: $exception")
+            }
+            catch (exception: Exception) {
+                Log.e(TAG, "connectException: $exception")
 
-        }
+            }
+
+//        }
+
+
     }
 
     fun sendIceCandidate(candidate: IceCandidate?,isJoin : Boolean) = runBlocking {

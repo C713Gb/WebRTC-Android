@@ -32,10 +32,15 @@ class RTCClient(
         initPeerConnectionFactory(context)
     }
 
+    private val list: MutableList<String> = mutableListOf("stun:stun.l.google.com:19302",
+        "turn:numb.viagenie.ca[webrtc@live.com:muazkh]")
+
     private val iceServer = listOf(
-        PeerConnection.IceServer.builder("stun:stun.l.google.com:19302")
-            .createIceServer()
-    )
+            PeerConnection.IceServer.builder("turn:numb.viagenie.ca")
+                .setUsername("webrtc@live.com")
+                .setPassword("muazkh")
+                .createIceServer()
+        )
 
     private val peerConnectionFactory by lazy { buildPeerConnectionFactory() }
     private val videoCapturer by lazy { getVideoCapturer(context) }
